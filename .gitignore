@@ -3,7 +3,7 @@ luac.out
 
 # mission-files in subdirectory ./missions/*.waypoints
 ./missions
-./missions/*.waypoint
+./missions/*.waypoints
 
 # luarocks build files
 *.src.rock
