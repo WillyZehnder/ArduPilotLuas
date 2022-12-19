@@ -17,7 +17,7 @@ The switching is allowed:
 Additionally to SM_SwitchMission.lua
   -you can store the current location as a mission with just one point, where to loiter-unlimited
   -that storing is initiated by a pushbutton defined in parameter SSM_RC_STORE (300..307)
-  -if the selection of mission# is done by pushbutton, that new mission is usable immediatelly
+  -if the selection of mission# is done by pushbutton, that new mission is usable immediately
 
 CAUTION: Use this script AT YOUR OWN RISK.
 
