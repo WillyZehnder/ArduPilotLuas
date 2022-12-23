@@ -21,7 +21,7 @@ Additionally to SM_SwitchMission.lua
 
 CAUTION: Use this script AT YOUR OWN RISK.
 
--- Willy Zehnder -- 16.12.2022
+-- Willy Zehnder -- 23.12.2022
 
 ]]
 -------- SCRIPT 'CONSTANTS' --------
@@ -80,7 +80,7 @@ end
 local function add_params(key, prefix, tbl)
 -- add script-specific parameter table
   if not param:add_table(key, prefix, #tbl) then
-    send_msg(INFO, string.format('Could not add table %s at key %d', prefix, key))
+    --send_msg(INFO, string.format('Could not add table %s at key %d', prefix, key))
     return false
   end
   for num, data in ipairs(tbl) do
@@ -93,18 +93,21 @@ end
 local function read_mission(file_path)
 -- try to read the mission from file and write it into FC
   local file = io.open(file_path)
-
-  -- check file-header
-  local headline = file:read('l')
-  if headline == nil then
-    send_msg(WARN,string.format('%s not existing or empty', file_name))
+  if file then
+    -- check file-header
+    local headline = file:read('l')
+    if headline == nil then
+      send_msg(WARN,string.format('%s is empty', file_name))
+      return
+    end
+    if string.find(headline, 'QGC WPL 110') ~= 1 then
+      send_msg(WARN,string.format('%s incorrect format', file_name))
+      return
+    end
+  else
+    send_msg(WARN,string.format('%s not existing', file_name))
     return
-  end
-  if string.find(headline, 'QGC WPL 110') ~= 1 then
-    send_msg(WARN,string.format('%s incorrect format', file_name))
-    return
-  end
-
+end
   -- clear any existing mission
   assert(mission:clear(), string.format('%s: Could not clear current mission', SCRIPT_NAME))
 
@@ -266,9 +269,13 @@ local function count_missions()
   while true do
     file_name = string.format('%s_%s%d.%s', SCRIPT_NAME, FILE_PREFIX, file_count, FILE_EXTENSION)
     file = io.open(string.format('%s/%s', sub_dir, file_name))
-    if file:read('l') ~= nil then
-      file_count = file_count + 1
-      file:close()
+    if file then
+      if file:read('l') ~= nil then
+        file_count = file_count + 1
+        file:close()
+      else
+        break
+      end
     else
       send_msg(INFO, string.format('%d missions found', file_count))
       break
@@ -373,21 +380,30 @@ function init()
   end
 
   -- finding correct sub_dir for SITL or SD-card
+  local subdir_found = false
   sub_dir = string.format('%s/%s', SUB_DIR_APM, SUB_DIR_MISSIONS)
   file_name = string.format('%s_%s%d.%s', SCRIPT_NAME, FILE_PREFIX, 0, FILE_EXTENSION)
   local file = io.open(string.format('%s/%s', sub_dir, file_name))
-  if file:read('l') ~= nil then
-    file:close()
-  else
+  if file then
+    if file:read('l') then
+      file:close()
+      subdir_found = true
+    end
+  end
+  if not subdir_found then
     sub_dir = string.format('%s/%s', SUB_DIR_SITL, SUB_DIR_MISSIONS)
     file = io.open(string.format('%s/%s', sub_dir, file_name))
-    if file:read('l') ~= nil then
-      file:close()
-    else
-      send_msg(WARN, string.format('No file %s found ...', file_name))
-      send_msg(WARN, string.format('...in SubDir /%s', SUB_DIR_MISSIONS))
-      return init, INTERRUPTED_MS
+    if file then
+      if file:read('l') then
+        file:close()
+        subdir_found = true
+      end
     end
+  end
+  if not subdir_found then
+    send_msg(WARN, string.format('No file %s found ...', file_name))
+    send_msg(WARN, string.format('...in SubDir /%s', SUB_DIR_MISSIONS))
+    return init, INTERRUPTED_MS
   end
   send_msg(INFO, string.format('sub_dir: %s', sub_dir))
 
@@ -397,7 +413,7 @@ function init()
 
   if (num_select_positions > 1) and (num_files < num_select_positions) then
     send_msg(WARN, string.format('only %d files found', num_files))
-    return init, INTERRUPTED_MS
+    -- return init, INTERRUPTED_MS
   end  
 
   -- find channel for mission-storing
