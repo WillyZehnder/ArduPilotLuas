@@ -12,17 +12,14 @@ The selection can be done by multi-position-switch or pushbutton.
 The relocation can be started by long-press of a pushbutton
 The kind of relocation can be selected by a 3-pos-switch or directly via parameter
 
-ATTENTION!!!  - At start of the script, the Mission in FC is saved in SRM_Backup#x.waypoints in cyclic manner
+ATTENTION!!!  - At start of the script, the Mission in FC is saved in SRM_Backup#x.waypoints in a cyclic manner
                 The last Backup# you can find in SRM_Count.txt.
-              - The file SRM_test is just for finding the correct subdirectory at start of the script
-                (it's still existing because lua is not allowed to delete a file)
 
 CAUTION: Use this script AT YOUR OWN RISK.
 
--- Willy Zehnder -- 08.12.2022
+-- Willy Zehnder -- 09.03.2023
 
 ]]-----------------------------------------------------------------------------
-do return end -- #######################################################
 
 -------- SCRIPT/ARDUPILOT 'CONSTANTS' --------
 local SCRIPT_NAME           = 'SRM'           -- abbreviation of scriptname for messages to GCS
@@ -34,7 +31,6 @@ local BACKUP_FILE_PREFIX    = 'Backup#'       -- filename-prefix of backup files
 local FILE_EXTENSION        = 'waypoints'     -- file-extension of all mission files
 local BACKUP_FILE_MAX       = 5               -- amount of backup files (circle)
 local COUNT_FILE            = 'Count.txt'     -- filename of count file for backups
-local TEST_FILE             = 'Test'          -- filename of file for finding correct subdir
 
 local LONG_PRESS_MS         = 1000            -- time to long press pushbutton to start loading/relocating the mission
 local SHORT_INTERV_MS       = 20              -- interval to find param_table_key
@@ -126,15 +122,21 @@ local function read_mission(read_path, read_file, relocation)
   local untranslated_loc  = Location()
   local current_wp        = Location()
 
+
   local file = io.open(string.format('%s/%s', read_path, read_file), "r")
-  local headline = file:read('l')
+  if file then
+    local headline = file:read('l')
   -- check header
-  if headline == nil then
-    send_msg(WARN,string.format('%s not existing or empty', read_file))
-    return false
-  end
-  if string.find(headline, 'QGC WPL 110') ~= 1 then
-    send_msg(WARN,string.format('%s incorrect format', read_file))
+    if not headline then
+      send_msg(WARN,string.format('%s is empty', read_file))
+      return false
+    end
+    if string.find(headline, 'QGC WPL 110') ~= 1 then
+      send_msg(WARN,string.format('%s incorrect format', read_file))
+      return false
+    end
+  else
+    send_msg(WARN,string.format('%s not existing', read_file))
     return false
   end
 
@@ -426,22 +428,13 @@ local function initialize()
     end
   end
 
-
-  -- finding correct sub_dir for SITL or SD-card
-  local test_name = string.format('%s_%s', SCRIPT_NAME, TEST_FILE)
-  sub_dir = string.format('%s/%s', SUB_DIR_APM, SUB_DIR_MISSIONS)
-  local file = io.open(string.format('%s/%s', sub_dir, test_name), 'w')
-  if file:write('test') ~= nil then
-    file:close()
+-- get the path to the scripts directory. This will be scripts/ on SITL and APM/scripts on a ChibiOS board
+  local dlist = dirlist(SUB_DIR_APM)
+  if dlist and #dlist > 0 then
+    sub_dir = string.format('%s/%s', SUB_DIR_APM, SUB_DIR_MISSIONS)
   else
+    -- otherwise assume scripts/
     sub_dir = string.format('%s/%s', SUB_DIR_SITL, SUB_DIR_MISSIONS)
-    file = io.open(string.format('%s/%s', sub_dir, test_name), 'w')
-  if file:write('test') ~= nil then
-      file:close()
-    else
-      send_msg(WARN, 'No fitting directory found')
-      return initialize, INTERRUPTED_MS
-    end
   end
 
   local option_name = string.format('%s%s', PARAM_PREFIX, 'POSITIONS')
@@ -548,7 +541,7 @@ local function initialize()
   num_files = 0
   while true do
     file = io.open(string.format('%s/%s', sub_dir, string.format('%s_%s%d.%s', SCRIPT_NAME, MISSION_FILE_PREFIX, num_files, FILE_EXTENSION)))
-    if file:read('l') ~= nil then
+    if file then
       num_files = num_files + 1
       file:close()
     else
