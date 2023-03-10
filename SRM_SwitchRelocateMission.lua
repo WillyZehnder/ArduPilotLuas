@@ -12,12 +12,12 @@ The selection can be done by multi-position-switch or pushbutton.
 The relocation can be started by long-press of a pushbutton
 The kind of relocation can be selected by a 3-pos-switch or directly via parameter
 
-ATTENTION!!!  - At start of the script, the Mission in FC is saved in SRM_Backup#x.waypoints in a cyclic manner
+ATTENTION!!!  - At start of the script, the current Mission in FC is saved in SRM_Backup#x.waypoints in a cyclic manner
                 The last Backup# you can find in SRM_Count.txt.
 
 CAUTION: Use this script AT YOUR OWN RISK.
 
--- Willy Zehnder -- 09.03.2023
+-- Willy Zehnder -- 10.03.2023
 
 ]]-----------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ local COUNT_FILE            = 'Count.txt'     -- filename of count file for back
 local LONG_PRESS_MS         = 1000            -- time to long press pushbutton to start loading/relocating the mission
 local SHORT_INTERV_MS       = 20              -- interval to find param_table_key
 local RUN_INTERVAL_MS       = 100             -- interval to check input-changes
-local SBY_INTERVAL_MS       = 30000           -- interval if script is inactive i.e. num_sw_positions is lower than 1
+local SBY_INTERVAL_MS       = 30000           -- interval if script is inactive i.e. SRM_POSITIONS is lower than 1
 local INTERRUPTED_MS        = 10000           -- interval if script is paused/interrupted by a problem
 
 local WARN                  = 4               -- MAV_SEVERITY_WARNING
@@ -64,7 +64,7 @@ local PARAM_TABLE           = {
     { 'RELOCATION'  , TRANSLATE_ROTATE },    -- the selected RCx_Option (300..307) for definition of the kind of relocation or 0=no relocation / 1=translation only / 2=translation+rotation
     { 'NO_RELOC_M'  ,               50 },    -- no relocation of Mission within a radius of XX m around Homepoint (recommended: Plane:50m, Copter+Heli:10..20m, others:5m)
 }
-local POSITIONS  = Parameter()               -- create Parameter() objects
+local POSITIONS  = Parameter()               -- create Parameter() objects for frequently read paramters
 local RELOCATION = Parameter()
 local NO_RELOC_M = Parameter()
 
@@ -78,8 +78,8 @@ local file_index            = 0
 local wait_finger_off       = false
 
 local scr_rc_select         = nil             -- RC-channel of multipos-switch for selection of mission (if any)
-local scr_rc_start          = nil
-local scr_rc_relocation     = nil
+local scr_rc_start          = nil             -- RC-channel of start-button
+local scr_rc_relocation     = nil             -- RC-channel of 3-pos-switch for selection of kind of relocation
 local no_relocation_radius  = -1
 local last_switch_position  = -1              -- last position of RC-switch
 local last_button_position  = 0               -- last position of RC-pushbutton
@@ -150,7 +150,7 @@ local function read_mission(read_path, read_file, relocation)
     local data = {}
     for i = 1, 12 do
       data[i] = file:read('n')
-      if data[i] == nil then
+      if not data[i] then
         if i == 1 then
           -- reached correct end of file
           send_msg(INFO, string.format('%s (%d items) loaded', read_file, index-1))
@@ -278,8 +278,7 @@ local function change_mission_allowed()
   end
 end
   
-local function update_params() -- update some parameters
-
+local function update_params()
   -- read parameter and if necessary find corresponding rc-channel for the switch
   local option_value = RELOCATION:get()
   if (option_value >= NO_RELOCATION) and (option_value <= TRANSLATE_ROTATE) then -- kind of relocation directly via parameter
@@ -316,13 +315,13 @@ local function update_params() -- update some parameters
   if option_value then
     if option_value ~= num_sw_positions then
       if option_value == 1 then
-        send_msg(INFO, string.format('pushbutton'))
+        send_msg(INFO, string.format('select mission by pushbutton'))
       elseif option_value > 1 then
-        send_msg(INFO, string.format('switch: %i pos',option_value))
+        send_msg(INFO, string.format('select mission by switch: %i pos',option_value))
       end
     end
     if option_value < 1 then
-      send_msg(INFO, string.format('pausing (%s<1)', option_name))
+      send_msg(INFO, string.format('script is pausing (%sPOSITIONS<1)', PARAM_PREFIX))
     end
     num_sw_positions = option_value
   end
@@ -483,7 +482,7 @@ local function initialize()
   if option_value then
     if (option_value == 0) then
       scr_rc_select = scr_rc_start
-      send_msg(INFO, 'Selection by startbutton')
+      send_msg(INFO, 'selection via startbutton')
     elseif (option_value >= 300) and (option_value <= 307) then
       scr_rc_select = rc:find_channel_for_option(option_value)
       if not scr_rc_select then
@@ -558,7 +557,7 @@ local function initialize()
     if num_sw_positions > 1 then check_switch() end --to preselect the switched mission#
   end  
 
-  if not read_mission(sub_dir, string.format('%s_%s%d.%s', SCRIPT_NAME, MISSION_FILE_PREFIX, file_index, FILE_EXTENSION), 0) then
+  if not read_mission(sub_dir, string.format('%s_%s%d.%s', SCRIPT_NAME, MISSION_FILE_PREFIX, file_index, FILE_EXTENSION), NO_RELOCATION) then
     return initialize, INTERRUPTED_MS
   end
 
