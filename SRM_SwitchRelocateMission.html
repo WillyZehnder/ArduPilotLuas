@@ -1,0 +1,139 @@
+<h1>SRM_SwitchRelocateMission.lua - ArduPilot Lua script</h1>
+
+<h2>OVERVIEW:</h2>
+
+<p>That script is derived from SM<em>SwitchMission.lua in <br>
+https://github.com/ArduPilot/ardupilot/tree/master/libraries/AP</em>Scripting/applets <br>
+and the examples in https://github.com/ArduPilot/ardupilot/tree/master/libraries/AP_Scripting/examples  </p>
+
+<p>That script is useful to select an existing mission on SD-card via RC-channel, relocate (translate/rotate) it and self-switch to mode-AUTO</p>
+
+<p>The selection of the mission can be done by multi-position-switch or pushbutton.</p>
+
+<p>The relocation is started by long-press of a pushbutton</p>
+
+<p>The kind of relocation can be selected by a 3-pos-switch or directly via parameter setting</p>
+
+<p>The amount of missions is theoretically unlimited.</p>
+
+<p>This script is intended to be used at least with yaapu-script in transmitter, because all info and warning messages of the script you can receive herein. If you can accept not receiving any feedback, the usecase with a multi-position-switch for selection is possible also without yaapu-script. https://github.com/yaapu/FrskyTelemetryScript</p>
+
+<h3><strong>CAUTION: Use this script AT YOUR OWN RISK</strong></h3>
+
+<h2>GENERAL INFORMATION</h2>
+
+<ul>
+<li><p>For not to lose accidentially a mission in FC at start of the script, the Mission in FC is saved to one of five files SRM<em>Backup#x.waypoints in cyclic manner. <br>
+The last used Backup# you can find in SRM</em>Count.txt.</p></li>
+<li><p>Only Waypoints (MAV<em>CMD</em>NAV<em>WAYPOINT/ID:16) and Spline-Waypoints (MAV</em>CMD<em>NAV</em>SPLINE_WAYPOINT/ID:82) will be relocated.</p></li>
+<li><p>The diverse MAV<em>CMD</em>NAV<em>LOITER</em>xyz commands (e.g. MAV<em>CMD</em>NAV<em>LOITER</em>UNLIM) with optional location-information will not be relocated. If you want to relocate that commands, just put a Waypoint at the location and use the LOITER_xyz without location as next command.</p></li>
+<li><p>Waypoints after DO<em>LAND</em>START (MAV<em>CMD</em>DO<em>LAND</em>START/ID:189) will never be relocated.</p></li>
+<li><p>The Mission will be rotated by the heading of the vehicle at the moment the Start-Button was pressed (relative to North). I.e. if the vehicles heading is East, the rotation will be 90° clockwise. So you should plan your Missions "North-orinted".</p></li>
+<li><p>The altitude of the relocated Waypoints will be adapted only positive. I.e. if the vehicle at relocation is higher than the first Waypoint in mission, all Waypoint elevations will be increased accordingly. If it's lower, no adaption will take place.</p></li>
+<li><p>To prevent from accidentially relocation at start, there is an adjustable safety-radius arround Home within no relocation will happen.</p></li>
+</ul>
+
+<h2>SUMMARY OF PARAMETERS:</h2>
+
+<ul>
+<li><code>SRM_POSITIONS</code> -- the selection-method and/or amount of switch-positions <br>
+
+<ul>
+<li>&nbsp;&nbsp;1&ensp;= pushbutton for cyclic selection </li>
+<li>&gt;1 &nbsp;= amount of switch-positions</li>
+<li>&nbsp;&nbsp;0&ensp;= script paused</li>
+</ul></li>
+<li><code>SRM_RC_SELECT</code> -- the RCx_Option (300..307) for selecting the mission or 0 to use start-button defined in <code>SRM_RC_START</code></li>
+<li><code>SRM_RC_START</code>  -- the selected RCx_Option (300..307) for pushbutton to start the relocation</li>
+<li><code>SRM_RELOCATION</code> -- the selected RCx_Option (300..307) of 3-pos-switch for definition of the kind of relocation or <br>
+directly via parameter:
+
+<ul>
+<li>0 = no relocation</li>
+<li>1 = translation only</li>
+<li>2 = translation+rotation</li>
+</ul></li>
+<li><code>SRM_NO_RELOC_M</code> -- no relocation of Mission within a radius of XX m around Homepoint
+
+<ul>
+<li>should be adapted according to vehicle (kind, size, power, agility, ...)</li>
+<li>recommended: Plane=50m, Copter+Heli=10..20m, others=5m</li>
+</ul></li>
+</ul>
+
+<h2>HOW THE SCRIPT WORKS:</h2>
+
+<h3>Initialization:</h3>
+
+<ul>
+<li>find or add script-specific parameter-table SRM_</li>
+<li>find correct subdirectory for scripting (SITL or SD-card)</li>
+<li>read necessary parameters, set corresponding values and find corresponding RCx_OPTION-channels</li>
+<li>backup mission on FC to file SRM_Backup#x.waypoints</li>
+<li>count available and check sufficient number of missions</li>
+<li>load via multi-switch selected Mission# or Mission#0 if selection by pushbutton (unrelocated) to FC</li>
+</ul>
+
+<h3>Running:</h3>
+
+<ul>
+<li>check <code>SRM_RC_SELECT</code> and preselect mission accordingly</li>
+<li>check start-RC-pushbutton (long-press) and if activated:
+
+<ul>
+<li>get current location</li>
+<li>get kind of relocation</li>
+<li>relocate the first Waypoint(s.c.Basepoint) of the preselected mission to the current location and the other Waypoins relatively.</li>
+<li>if selected, the Waypoints will be rotated around the Basepoint by the amount of heading of the vehicle (difference to North) at the moment you pushed the button</li>
+<li>translate altitude and load Waypoints to FC</li>
+<li>if no problem, set mode-AUTO</li>
+</ul></li>
+</ul>
+
+<h3>Special Cases:</h3>
+
+<ul>
+<li>If the Parameter <code>MIS_RESTART</code> is set to 0 (Resume Mission), a further translation is earliest possible after a started Mission is reset or finished completely.</li>
+</ul>
+
+<h2>HOW TO USE:</h2>
+
+<h3>Preparation:</h3>
+
+<ul>
+<li>activate scripting on your FC as described here: https://ardupilot.org/dev/docs/common-lua-scripts.html#lua-scripts</li>
+<li>adapt <code>SCR_HEAP_SIZE</code> to e.g. 102400 to have sufficient memory available for the script</li>
+<li>create the subdirectory 'missions' in the directory where the sripts are stored</li>
+<li>load the Missions to that subdir:
+
+<ul>
+<li>Mission#0.waypoints</li>
+<li>Mission#1.waypoints</li>
+<li>Mission#2.waypoints</li>
+<li>a.s.o. <br>
+<strong>Hint:</strong> No gap in the mission-numbers allowed</li>
+</ul></li>
+<li>select the RC-input-pushbutton you want to use as <code>SRM_RC_START</code> (300..307) and set parameter <code>RCx_OPTION</code> accordingly</li>
+<li>select the RC-input-3-pos-switch you want to use as <code>SRM_RELOCATION</code> (300..307) and set parameter <code>RCx_OPTION</code> accordingly
+or set <code>SRM_RELOCATION</code> directly to 0=no relocation / 1=translation only / 2=translation+rotation</li>
+</ul>
+
+<h3>Options you have to select before relocation</h3>
+
+<ul>
+<li>Mission# (via pushbutton or multi-switch)</li>
+<li>Kind of relocation (via 3-pos-switch or parameter <code>SRM_RELOCATION</code>)</li>
+</ul>
+
+<h3>Relocation</h3>
+
+<ul>
+<li>start as usual</li>
+<li>switch to a none-AUTO mode e.g. FBWB in ArduPlane and move to where you want to relocate the Mission</li>
+<li>push the selected <code>SRM_RC_START</code> button</li>
+<li>mode-AUTO is selected automatically</li>
+</ul>
+
+<h2>Hint for experienced users:</h2>
+
+<p>It would be straightforward to use other sources (e.g. a poti on an RC-input) to generate the amount of rotation, but from my side it's not intended to overload that script more than necessary.</p>
