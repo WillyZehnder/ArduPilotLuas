@@ -17,9 +17,12 @@ ATTENTION!!!  - At start of the script, the current Mission in FC is saved in SR
 
 CAUTION: Use this script AT YOUR OWN RISK.
 
--- Willy Zehnder -- 10.03.2023
+Willy Zehnder
 
 ]]-----------------------------------------------------------------------------
+
+-- Version 28.03.2023: Switch back to last Mode by long-press of start-button
+local SCRIPT_VERSION        = '28.03.2023'
 
 -------- SCRIPT/ARDUPILOT 'CONSTANTS' --------
 local SCRIPT_NAME           = 'SRM'           -- abbreviation of scriptname for messages to GCS
@@ -42,9 +45,11 @@ local WARN                  = 4               -- MAV_SEVERITY_WARNING
 local INFO                  = 6               -- MAV_SEVERITY_INFO
 
 local MODE_AUTO             = 10
+local MODE_THERMAL          = 24
 local REASON_RC             = 1
 local REASON_GCS            = 2
 local REASON_INITIALIZED    = 26
+local REASON_SCRIPTING      = 32
 
 local MAV_WAYPOINT          = 16              -- MAV_CMD_NAV_WAYPOINT
 local MAV_SPLINE_WAYPOINT   = 82              -- MAV_CMD_NAV_SPLINE_WAYPOINT
@@ -90,6 +95,8 @@ local rotation              = 0.0             -- heading of the vehicle when the
 local altitude_translation  = 0               -- in [cm]
 local param_table_key       = 0               -- start-value for searching free or still used table-key between 0 and 200
 
+local relocation_active     = false           -- flag to start correct action it button long-pressed
+local last_mode             = nil             -- backup of mode before AUTO to switch back to
 
 local function send_msg(msg_type, msg)
 -- helper to have the SCRIPT_NAME in front of each message to GCS
@@ -263,7 +270,8 @@ local function change_mission_allowed()
     and
     ((mode_reason == REASON_RC) or
     (mode_reason == REASON_GCS) or
-    (mode_reason == REASON_INITIALIZED)))
+    (mode_reason == REASON_INITIALIZED) or
+    (mode_reason == REASON_SCRIPTING)))
   then
     return true
   else
@@ -354,7 +362,9 @@ local function start_relocation(file_name)
       send_msg(INFO, 'no relocation')
     end
     if read_mission(sub_dir, file_name, relocation) then
+      last_mode = vehicle:get_mode()
       vehicle:set_mode(MODE_AUTO) -- switch to mode-AUTO
+      relocation_active = true
     end
   end
 end
@@ -378,6 +388,15 @@ local function check_button()
   -- check if long-pressed
   local long_press = (millis() - last_sw_change) > LONG_PRESS_MS
   if long_press then
+      if relocation_active then
+        if ((vehicle:get_mode() == MODE_AUTO) or (vehicle:get_mode() == MODE_THERMAL)) then
+          send_msg(INFO, 'Switch back to previous Mode')
+          vehicle:set_mode(last_mode)
+          relocation_active = false
+          wait_finger_off = true
+          return
+        end
+      end
       start_relocation(string.format('%s_%s%d.%s', SCRIPT_NAME, MISSION_FILE_PREFIX, file_index, FILE_EXTENSION))
       wait_finger_off = true
       return
@@ -561,7 +580,7 @@ local function initialize()
     return initialize, INTERRUPTED_MS
   end
 
-  send_msg(INFO, 'Script running')
+  send_msg(INFO, string.format('Script running (Version %s)', SCRIPT_VERSION))
   return standby, RUN_INTERVAL_MS -- init done -> regular loop start
 
 end
